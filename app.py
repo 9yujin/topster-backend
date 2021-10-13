@@ -25,7 +25,7 @@ def get_arts():
     search_str = request.args.get('search')
     print(search_str)
 
-    response = sp.search(search_str, limit="30",type='album', market='KR')['albums']['items']
+    response = sp.search(search_str, limit="50",type='album', market='KR')['albums']['items']
     images=[]
     titles=[]
     artists=[]
