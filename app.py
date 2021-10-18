@@ -6,6 +6,8 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from flask_cors import CORS
 from pymongo import MongoClient
+import bcrypt
+
 client = MongoClient('localhost', 27017)
 db = client.mytopster
 
@@ -53,15 +55,41 @@ def post_topster():
     print(data)
     return jsonify({'msg':"data received"})
 
+#---------회원가입---------
 @app.route('/api/join', methods=['POST'])
 def post_join():
-    joinform = request.get_json()
-    print(joinform)
-    return jsonify({'msg':"data received"})
+    data = request.get_json()
+    findID = db.user.find_one({"join_email":data['join_email']})
+    if findID:
+        return jsonify({'msg':"invalid"})
+    
+    password = data['join_password']
+    bpw = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+    str_bpw = bpw.decode('utf-8')
+    data['join_password'] = str_bpw
+    print(data)
+    db.user.insert_one(data)
+    return jsonify({'msg':"join data received"})
+
+#---------로그인---------
+@app.route('/api/login', methods=['POST'])
+def post_login():
+    data = request.get_json()
+    password = data['login_password']
+    
+
+    findID = db.user.find_one({"join_email":data['login_email']},{'_id': False})
+    if findID:
+        db_bpw = findID['join_password']
+        checkpw = bcrypt.checkpw(password.encode('utf-8'), db_bpw.encode('utf-8'))
+        print(checkpw)
+        if checkpw:
+            return jsonify({'msg':"allowed"})
+    print(data)
+    return jsonify({'msg':"tryagain"})
 
 
 
 
 if __name__ == '__main__':  
    app.run(host='0.0.0.0', debug=True)
- 
