@@ -5,10 +5,12 @@ import sys
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from flask_cors import CORS
+from pymongo import MongoClient
+client = MongoClient('localhost', 27017)
+db = client.mytopster
 
 app = Flask(__name__)
 cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
-
 cid = "79b0fc127f5a49978ea0045844685dcf"
 secret = "05cb5b72719d435f8b02df73658b44a6"
 sp = spotify = spotipy.Spotify(auth_manager=SpotifyClientCredentials(client_id=cid, client_secret=secret))
@@ -44,7 +46,21 @@ def get_arts():
     result["res"] = {"albums": result_tmp}
     """ pprint.pprint(result) """
     return result
-   
+
+@app.route('/api/upload', methods=['POST'])
+def post_topster():
+    data = request.data
+    print(data)
+    return jsonify({'msg':"data received"})
+
+@app.route('/api/join', methods=['POST'])
+def post_join():
+    joinform = request.get_json()
+    print(joinform)
+    return jsonify({'msg':"data received"})
+
+
+
 
 if __name__ == '__main__':  
    app.run(host='0.0.0.0', debug=True)
