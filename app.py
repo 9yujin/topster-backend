@@ -1,3 +1,4 @@
+from logging import currentframe
 from re import search
 from flask import Flask, jsonify, request
 import pprint
@@ -7,6 +8,10 @@ from spotipy.oauth2 import SpotifyClientCredentials
 from flask_cors import CORS
 from pymongo import MongoClient
 import bcrypt
+import jwt
+import base64
+import os
+from datetime import datetime
 
 client = MongoClient('localhost', 27017)
 db = client.mytopster
@@ -17,13 +22,13 @@ cid = "79b0fc127f5a49978ea0045844685dcf"
 secret = "05cb5b72719d435f8b02df73658b44a6"
 sp = spotify = spotipy.Spotify(auth_manager=SpotifyClientCredentials(client_id=cid, client_secret=secret))
 
-""" if len(sys.argv) > 1:
-    search_str = sys.argv[1]
-else:
-    search_str = '박소은'
+@app.route('/')
+def enter_page():
+    print("req")
+    return jsonify({'msg':"data received"})
 
-res = sp.search(search_str, limit="20",type='album', market='KR') """
 
+#---------앨범아트----------
 @app.route('/api/albums')
 def get_arts():
     search_str = request.args.get('search')
@@ -49,17 +54,43 @@ def get_arts():
     """ pprint.pprint(result) """
     return result
 
+
+
+#---------업로드---------
 @app.route('/api/upload', methods=['POST'])
 def post_topster():
-    data = request.data
-    print(data)
+    now = datetime.now()
+    now2 = now.strftime("%D_%H%M_%S")
+    date = now2.replace('/', '-')
+    
+    data = request.get_json()
+    userid = request.args.get('user')
+
+    absolute_path = os.path.abspath(__file__)
+    path = os.path.dirname(absolute_path)
+    path_root = os.path.dirname(path)
+    path_user = path_root + '/images/' + userid
+
+    if not os.path.exists(path_user):
+            os.makedirs(path_user)
+
+    dataValue = str(data['topsterimage'])
+    dataBin=dataValue.split(',')[1]
+    imgdata = base64.b64decode(dataBin)
+    
+    filename = path_user + '/' + date +'.png' 
+    with open(filename, 'wb') as f:
+        f.write(imgdata)
+
     return jsonify({'msg':"data received"})
+
+
 
 #---------회원가입---------
 @app.route('/api/join', methods=['POST'])
 def post_join():
     data = request.get_json()
-    findID = db.user.find_one({"join_email":data['join_email']})
+    findID = db.user.find_one({"join_id":data['join_id']})
     if findID:
         return jsonify({'msg':"invalid"})
     
@@ -69,7 +100,7 @@ def post_join():
     data['join_password'] = str_bpw
     print(data)
     db.user.insert_one(data)
-    return jsonify({'msg':"join data received"})
+    return jsonify({'msg':"registered"})
 
 #---------로그인---------
 @app.route('/api/login', methods=['POST'])
@@ -78,7 +109,7 @@ def post_login():
     password = data['login_password']
     
 
-    findID = db.user.find_one({"join_email":data['login_email']},{'_id': False})
+    findID = db.user.find_one({"join_id":data['login_id']},{'_id': False})
     if findID:
         db_bpw = findID['join_password']
         checkpw = bcrypt.checkpw(password.encode('utf-8'), db_bpw.encode('utf-8'))
