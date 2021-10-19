@@ -115,7 +115,7 @@ def post_login():
         checkpw = bcrypt.checkpw(password.encode('utf-8'), db_bpw.encode('utf-8'))
         print(checkpw)
         if checkpw:
-            return jsonify({'msg':"allowed"})
+            return jsonify({'msg':"allowed", "name":findID["join_name"]})
     print(data)
     return jsonify({'msg':"tryagain"})
 
