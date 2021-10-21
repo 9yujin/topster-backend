@@ -1,6 +1,6 @@
 from logging import currentframe
 from re import search
-from flask import Flask, jsonify, request
+from flask import Flask, json, jsonify, request
 import pprint
 import sys
 import spotipy
@@ -11,7 +11,7 @@ import bcrypt
 import jwt
 import base64
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 client = MongoClient('localhost', 27017)
 db = client.mytopster
@@ -51,7 +51,6 @@ def get_arts():
     for i in range(len(images)):
         result_tmp.append({"image": images[i], "title": titles[i], "artist": artists[i], "id": ids[i]})
     result["res"] = {"albums": result_tmp}
-    """ pprint.pprint(result) """
     return result
 
 
@@ -63,26 +62,51 @@ def post_topster():
     now2 = now.strftime("%D_%H%M_%S")
     date = now2.replace('/', '-')
     
-    data = request.get_json()
-    userid = request.args.get('user')
+    try:
+        data = request.get_json()
+        userid = request.args.get('user')
 
-    absolute_path = os.path.abspath(__file__)
-    path = os.path.dirname(absolute_path)
-    path_root = os.path.dirname(path)
-    path_user = path_root + '/images/' + userid
+        absolute_path = os.path.abspath(__file__)
+        path = os.path.dirname(absolute_path)
+        path_root = os.path.dirname(path)
+        path_user = path_root + '/images/' + userid
 
-    if not os.path.exists(path_user):
+        if not os.path.exists(path_user):
             os.makedirs(path_user)
 
-    dataValue = str(data['topsterimage'])
-    dataBin=dataValue.split(',')[1]
-    imgdata = base64.b64decode(dataBin)
+        dataValue = str(data['topsterimage'])
+        dataBin=dataValue.split(',')[1]
+        imgdata = base64.b64decode(dataBin)
     
-    filename = path_user + '/' + date +'.png' 
-    with open(filename, 'wb') as f:
-        f.write(imgdata)
+        filename = path_user + '/' + date +'.png' 
+        data = {"userid":userid, "filename":filename, "like": 0, "date":now}
+        db.posts.insert_one(data)
+        with open(filename, 'wb') as f:
+            f.write(imgdata)
+        
+        return jsonify({'msg':"upload succeeded"})
+    except:
+        return jsonify({'msg':"error"})
 
-    return jsonify({'msg':"data received"})
+
+
+#-------피드 가져오기-------
+@app.route('/api/feed', methods=['GET'])
+def get_feed():
+    search_user = request.args.get('search')
+    if search_user == "all":
+        data = list(db.posts.find({}, {'_id': False}))
+        data.reverse()
+        newdata = list()
+        for i in data:
+            with open(i['filename'], "rb") as f:
+                filedata = f.read()
+                encoded = base64.b64encode(filedata)
+                topsterimage = "data:image/png;base64," + encoded.decode('utf-8')
+            doc = {'userid':i['userid'], 'topsterImage':topsterimage, 'like':i['like'], 'date':i['date']}
+            newdata.append(doc)
+        return jsonify({"feedData":newdata})        
+    return jsonify({'msg':"received"})
 
 
 
@@ -102,24 +126,55 @@ def post_join():
     db.user.insert_one(data)
     return jsonify({'msg':"registered"})
 
+
+
+app.config['JWT_SECRET_KEY'] = 'your_secret_key_for_jwt'
+algorithm = 'HS256'
 #---------로그인---------
 @app.route('/api/login', methods=['POST'])
 def post_login():
     data = request.get_json()
     password = data['login_password']
     
-
     findID = db.user.find_one({"join_id":data['login_id']},{'_id': False})
     if findID:
         db_bpw = findID['join_password']
+        db_id = findID["join_id"]
         checkpw = bcrypt.checkpw(password.encode('utf-8'), db_bpw.encode('utf-8'))
         print(checkpw)
         if checkpw:
-            return jsonify({'msg':"allowed", "name":findID["join_name"]})
+            jwt_token = jwt.encode({"id":db_id, 'exp':datetime.utcnow() + timedelta(weeks=5)}, app.config['JWT_SECRET_KEY'], algorithm)
+            db.user.update({'join_id':db_id}, {'$set':{'jwt':jwt_token}})
+            return jsonify({'msg':"allowed", "name":db_id, "access_token":jwt_token})
     print(data)
     return jsonify({'msg':"tryagain"})
 
 
+
+#---------jwt인증---------
+@app.route('/api/auth', methods=['GET'])
+def get_auth():
+    cli_jwt = request.headers.get("Authorization")
+    if cli_jwt:
+        payload = jwt.decode(cli_jwt, app.config["JWT_SECRET_KEY"], algorithm)
+        findID = db.user.find_one({"join_id":payload['id']}, {'_id':False})
+        if findID:
+            return jsonify({'msg':"allowed", 'name':findID["join_name"], 'id':payload['id']})
+    else:
+        return jsonify({'msg':"not allowed"})
+
+#---------로그아웃(jwt삭제)---------
+@app.route('/api/logout', methods=['GET'])
+def get_logout():
+    cli_jwt = request.headers.get("Authorization")
+    if cli_jwt:
+        payload = jwt.decode(cli_jwt, app.config["JWT_SECRET_KEY"], algorithm)
+        findID = db.user.find_one({"join_id":payload['id']}, {'_id':False})
+        if findID:
+            db.user.update_one({'join_id':payload['id']},{'$set':{'jwt':""}})
+            return jsonify({'msg':"succeeded"})
+    else:
+        return jsonify({'msg':"no jwt"})
 
 
 if __name__ == '__main__':  
