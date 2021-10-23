@@ -12,7 +12,9 @@ import jwt
 import base64
 import os
 from datetime import datetime, timedelta
+from bson.objectid import ObjectId
 
+#client = MongoClient('mongodb://david0218:1q2w3e4r@localhost', 27017)
 client = MongoClient('localhost', 27017)
 db = client.mytopster
 
@@ -94,18 +96,22 @@ def post_topster():
 @app.route('/api/feed', methods=['GET'])
 def get_feed():
     search_user = request.args.get('search')
-    if search_user == "all":
-        data = list(db.posts.find({}, {'_id': False}))
-        data.reverse()
+    if search_user :
+        if search_user == "all":
+            data = list(db.posts.find({}).sort("_id",-1)) #새거부터 맨 위로
+        else:
+            data = list(db.posts.find({'userid':search_user}).sort("_id",-1)) #새거부터 맨 위로
         newdata = list()
+        print(data)
         for i in data:
             with open(i['filename'], "rb") as f:
                 filedata = f.read()
                 encoded = base64.b64encode(filedata)
                 topsterimage = "data:image/png;base64," + encoded.decode('utf-8')
-            doc = {'userid':i['userid'], 'topsterImage':topsterimage, 'like':i['like'], 'date':i['date']}
+            doc = {'userid':i['userid'], 'topsterImage':topsterimage, 'like':i['like'], 'date':i['date'], '_id':str(i["_id"])}
             newdata.append(doc)
-        return jsonify({"feedData":newdata})        
+        return jsonify({"feedData":newdata})      
+       
     return jsonify({'msg':"received"})
 
 
@@ -141,11 +147,17 @@ def post_login():
         db_bpw = findID['join_password']
         db_id = findID["join_id"]
         checkpw = bcrypt.checkpw(password.encode('utf-8'), db_bpw.encode('utf-8'))
-        print(checkpw)
+        
+        
         if checkpw:
             jwt_token = jwt.encode({"id":db_id, 'exp':datetime.utcnow() + timedelta(weeks=5)}, app.config['JWT_SECRET_KEY'], algorithm)
-            db.user.update({'join_id':db_id}, {'$set':{'jwt':jwt_token}})
-            return jsonify({'msg':"allowed", "name":db_id, "access_token":jwt_token})
+            if type(jwt_token) == bytes:
+                str_token = jwt_token.decode('utf-8')
+                db.user.update({'join_id':db_id}, {'$set':{'jwt':str_token}})
+                return jsonify({'msg':"allowed", "name":db_id,"access_token":str_token })  
+            elif type(jwt_token) == str:
+                db.user.update({'join_id':db_id}, {'$set':{'jwt':jwt_token}})
+                return jsonify({'msg':"allowed", "name":db_id,"access_token":jwt_token })      
     print(data)
     return jsonify({'msg':"tryagain"})
 
@@ -154,7 +166,9 @@ def post_login():
 #---------jwt인증---------
 @app.route('/api/auth', methods=['GET'])
 def get_auth():
+    print("user refresh")
     cli_jwt = request.headers.get("Authorization")
+    print(cli_jwt)
     if cli_jwt:
         payload = jwt.decode(cli_jwt, app.config["JWT_SECRET_KEY"], algorithm)
         findID = db.user.find_one({"join_id":payload['id']}, {'_id':False})
