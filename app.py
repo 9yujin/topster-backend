@@ -1,5 +1,5 @@
 from logging import currentframe
-from re import search
+from re import T, search
 from flask import Flask, json, jsonify, request
 import pprint
 import sys
@@ -81,7 +81,7 @@ def post_topster():
         imgdata = base64.b64decode(dataBin)
     
         filename = path_user + '/' + date +'.png' 
-        data = {"userid":userid, "filename":filename, "like": 0, "date":now}
+        data = {"userid":userid, "filename":filename, "like":0,"likeuser": [None], "date":now}
         db.posts.insert_one(data)
         with open(filename, 'wb') as f:
             f.write(imgdata)
@@ -95,26 +95,68 @@ def post_topster():
 #-------피드 가져오기-------
 @app.route('/api/feed', methods=['GET'])
 def get_feed():
-    search_user = request.args.get('search')
-    if search_user :
-        if search_user == "all":
+    user = request.args.get('user')
+    search = request.args.get('search', None)
+    print("user", user,"search", search,)
+    if search :
+        if search == "all": #전체 피드
             data = list(db.posts.find({}).sort("_id",-1)) #새거부터 맨 위로
-        else:
-            data = list(db.posts.find({'userid':search_user}).sort("_id",-1)) #새거부터 맨 위로
+        else: #내가 쓴 피드
+            data = list(db.posts.find({'userid':search}).sort("_id",-1)) #새거부터 맨 위로
         newdata = list()
-        print(data)
         for i in data:
+            #이미지 파일 가져오기
             with open(i['filename'], "rb") as f:
                 filedata = f.read()
                 encoded = base64.b64encode(filedata)
                 topsterimage = "data:image/png;base64," + encoded.decode('utf-8')
-            doc = {'userid':i['userid'], 'topsterImage':topsterimage, 'like':i['like'], 'date':i['date'], '_id':str(i["_id"])}
+            #피드 좋아요 여부 가져오기
+            
+            likeuser = i['likeuser']
+            if user in likeuser:
+                likebool = 1
+            else:
+                likebool = 0
+            doc = {'userid':i['userid'], 'topsterImage':topsterimage, 'date':i['date'], '_id':str(i["_id"]), "like":i['like'], "likebool":likebool }
+            
             newdata.append(doc)
         return jsonify({"feedData":newdata})      
        
     return jsonify({'msg':"received"})
 
 
+#---------글 삭제하기---------
+@app.route('/api/delete', methods=['GET'])
+def delete_feed():
+    postid = request.headers.get('postid')
+    findPost = db.posts.find_one({'_id':ObjectId(postid)})
+    if findPost:
+        file_path = findPost['filename']
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        db.posts.delete_one({'_id':ObjectId(postid)})
+        return jsonify({'msg':"succeeded"})
+    return jsonify({'msg':"nodata"})
+
+#---------좋아요 / 좋아요 삭제---------
+@app.route('/api/like', methods=['POST'])
+def like_feed():
+    data = request.get_json()
+    postid = data['postid']
+    like = data['like']
+    userid = data['userid']
+    print(data)
+    findPost = db.posts.find_one({'_id':ObjectId(postid)})
+    if findPost:
+        if int(like) == 0: #좋아요 누르기
+            db.posts.update({'_id':ObjectId(postid)}, {'$push': {'likeuser': userid  }})
+            db.posts.update_one({'_id': ObjectId(postid)}, {'$inc':{'like':1}})
+        if int(like) == 1: #좋아요 취소하기
+            db.posts.update({'_id':ObjectId(postid)}, {'$pull': {'likeuser': userid  }})
+            db.posts.update_one({'_id': ObjectId(postid)}, {'$inc':{'like':-1}})
+        #디비에 좋아요한 유저 정보 넣고 빼는거 까지 했음. 그 정보 클라로 보내는거 하면 됨
+        return jsonify({'msg': "succeeded"})
+    return jsonify({'msg':"nodata"})
 
 #---------회원가입---------
 @app.route('/api/join', methods=['POST'])
