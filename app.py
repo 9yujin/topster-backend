@@ -14,8 +14,8 @@ import os
 from datetime import datetime, timedelta
 from bson.objectid import ObjectId
 
-#client = MongoClient('mongodb://david0218:1q2w3e4r@localhost', 27017)
-client = MongoClient('localhost', 27017)
+client = MongoClient('mongodb://david0218:1q2w3e4r@localhost', 27017)
+#client = MongoClient('localhost', 27017)
 db = client.mytopster
 
 app = Flask(__name__)
@@ -97,10 +97,13 @@ def post_topster():
 def get_feed():
     user = request.args.get('user')
     search = request.args.get('search', None)
-    print("user", user,"search", search,)
+    offset = request.args.get('offset', None)
+    limit = request.args.get('limit', None)
+    print("user:", user,"search:", search,"offset:", offset, "limit:", limit)
     if search :
         if search == "all": #전체 피드
-            data = list(db.posts.find({}).sort("_id",-1)) #새거부터 맨 위로
+            #data = list(db.posts.find({}).sort("_id",-1))
+            data = list(db.posts.find({}).sort("_id",-1).skip(int(offset)).limit(int(limit)))
         else: #내가 쓴 피드
             data = list(db.posts.find({'userid':search}).sort("_id",-1)) #새거부터 맨 위로
         newdata = list()
