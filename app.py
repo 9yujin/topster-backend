@@ -14,14 +14,14 @@ import os
 from datetime import datetime, timedelta
 from bson.objectid import ObjectId
 
-client = MongoClient('mongodb://david0218:1q2w3e4r@localhost', 27017)
+client = MongoClient('mongodb://david0218:<password>@localhost', 27017)
 #client = MongoClient('localhost', 27017)
 db = client.mytopster
 
 app = Flask(__name__)
 cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
-cid = "79b0fc127f5a49978ea0045844685dcf"
-secret = "05cb5b72719d435f8b02df73658b44a6"
+cid = "<spotify_api_id>"
+secret = "<spotify_secret>"
 sp = spotify = spotipy.Spotify(auth_manager=SpotifyClientCredentials(client_id=cid, client_secret=secret))
 
 @app.route('/')
